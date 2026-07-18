@@ -1,9 +1,10 @@
-import { supabase } from '../lib/supabase';
+import { supabase, isSupabaseConfigurado } from '../lib/supabase';
 
 let servidorAtivo = null;
 
 export async function verificarServidor() {
   if (servidorAtivo !== null) return servidorAtivo;
+  if (!isSupabaseConfigurado()) { servidorAtivo = false; return false; }
   try {
     const { error } = await supabase.from('emendas').select('id').limit(1);
     servidorAtivo = !error;
