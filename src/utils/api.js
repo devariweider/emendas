@@ -259,19 +259,24 @@ export const api = {
       if (extrairCargo() === 'Visualizador') throw new Error('Acesso negado');
       if (!dados.emendas || !dados.gastos) throw new Error('Dados inválidos');
 
-      await supabase.from('gastos').delete().neq('id', 0);
-      await supabase.from('emendas').delete().neq('id', 0);
-      await supabase.from('usuarios').delete().neq('id', 0);
-      await supabase.from('elementos_despesa').delete().neq('id', 0);
+      const del1 = await supabase.from('gastos').delete().neq('id', 0);
+      if (del1.error) throw new Error('Erro ao limpar gastos: ' + del1.error.message);
+      const del2 = await supabase.from('emendas').delete().neq('id', 0);
+      if (del2.error) throw new Error('Erro ao limpar emendas: ' + del2.error.message);
+      const del3 = await supabase.from('usuarios').delete().neq('id', 0);
+      if (del3.error) throw new Error('Erro ao limpar usuarios: ' + del3.error.message);
+      const del4 = await supabase.from('elementos_despesa').delete().neq('id', 0);
+      if (del4.error) throw new Error('Erro ao limpar elementos: ' + del4.error.message);
       await supabase.from('config').delete().eq('id', 1);
 
       if (dados.emendas.length > 0) {
         const rows = dados.emendas.map((e) => ({
           id: e.id, parlamentar: e.parlamentar || '',
           numeroProposta: e.numeroProposta || '', processoSEI: e.processoSEI || '',
-          portaria: e.portaria || '', valorTotal: e.valorTotal || 0, dataCriacao: e.dataCriacao || '',
+          portaria: e.portaria || '', valorTotal: Number(e.valorTotal) || 0, dataCriacao: e.dataCriacao || '',
         }));
-        await supabase.from('emendas').insert(rows);
+        const r = await supabase.from('emendas').insert(rows);
+        if (r.error) throw new Error('Erro ao importar emendas: ' + r.error.message);
       }
       if (dados.gastos.length > 0) {
         const rows = dados.gastos.map((g) => ({
@@ -280,23 +285,30 @@ export const api = {
           numeroEmpenho: g.numeroEmpenho || '', numeroNotaFiscal: g.numeroNotaFiscal || '',
           data: g.data || '', projetoAtividade: g.projetoAtividade || '',
           fonteRecurso: g.fonteRecurso || '', numeroMemorando: g.numeroMemorando || '',
-          justificativa: g.justificativa || '', valorPago: g.valorPago || 0,
+          justificativa: g.justificativa || '', valorPago: Number(g.valorPago) || 0,
           numeroConta: g.numeroConta || '',
         }));
-        await supabase.from('gastos').insert(rows);
+        const r = await supabase.from('gastos').insert(rows);
+        if (r.error) throw new Error('Erro ao importar gastos: ' + r.error.message);
       }
       if (dados.usuarios?.length > 0) {
-        await supabase.from('usuarios').insert(dados.usuarios.map((u) => ({
+        const r = await supabase.from('usuarios').insert(dados.usuarios.map((u) => ({
           id: u.id, username: u.username || '', senha: u.senha || '', nome: u.nome || '', cargo: u.cargo || '',
         })));
+        if (r.error) throw new Error('Erro ao importar usuarios: ' + r.error.message);
       }
       if (dados.elementosDespesa?.length > 0) {
-        await supabase.from('elementos_despesa').insert(
+        const r = await supabase.from('elementos_despesa').insert(
           dados.elementosDespesa.map((el) => ({ nome: el.nome || '', padrao: !!el.padrao }))
         );
+        if (r.error) throw new Error('Erro ao importar elementos: ' + r.error.message);
       }
       if (dados.configInstituicao && Object.keys(dados.configInstituicao).length > 0) {
-        await supabase.from('config').insert({ id: 1, dados: dados.configInstituicao });
+        const configLimpa = { ...dados.configInstituicao };
+        if (configLimpa.logoUrl && configLimpa.logoUrl.length > 1000) {
+          configLimpa.logoUrl = '';
+        }
+        await supabase.from('config').upsert({ id: 1, dados: configLimpa }, { onConflict: 'id' });
       }
       await registrarLog(extrairUsuario(), 'RESTAURAR', 'backup', 0, `importação — ${dados.emendas.length} emendas, ${dados.gastos.length} gastos`);
     },
